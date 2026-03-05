@@ -55,6 +55,7 @@ export function ProxyGroupEditor({
   isRegionGroup = false,
 }: ProxyGroupEditorProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [dialerPopoverOpen, setDialerPopoverOpen] = useState(false)
 
   const updateField = <K extends keyof ProxyGroupFormState>(
     field: K,
@@ -84,7 +85,7 @@ export function ProxyGroupEditor({
               )}
             </div>
             <div className="flex items-center gap-1">
-              <Popover>
+              <Popover open={dialerPopoverOpen} onOpenChange={setDialerPopoverOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="ghost"
@@ -101,7 +102,7 @@ export function ProxyGroupEditor({
                     <Label className="text-xs">中转代理组</Label>
                     <Select
                       value={group.dialerProxyGroup || '__none__'}
-                      onValueChange={(v) => updateField('dialerProxyGroup', v === '__none__' ? '' : v)}
+                      onValueChange={(v) => { updateField('dialerProxyGroup', v === '__none__' ? '' : v); setDialerPopoverOpen(false) }}
                     >
                       <SelectTrigger className="h-8 text-xs">
                         <SelectValue placeholder="无" />
