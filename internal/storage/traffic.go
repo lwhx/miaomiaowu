@@ -2451,6 +2451,11 @@ func (r *TrafficRepository) UpdateUserCustomShortCode(ctx context.Context, usern
 	}
 	code = strings.TrimSpace(code)
 
+	// 确保 user_tokens 记录存在（新用户可能尚未登录，没有记录）
+	if _, err := r.GetOrCreateUserToken(ctx, username); err != nil {
+		return fmt.Errorf("ensure user token exists: %w", err)
+	}
+
 	res, err := r.db.ExecContext(ctx, `UPDATE user_tokens SET custom_user_short_code = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, code, username)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
