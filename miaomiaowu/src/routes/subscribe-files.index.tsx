@@ -59,6 +59,7 @@ type SubscribeFile = {
   template_filename: string
   selected_tags: string[]
   custom_short_code?: string
+  raw_output: boolean
   expire_at?: string | null
   created_at: string
   updated_at: string
@@ -338,6 +339,8 @@ function SubscribeFilesPage() {
     name: '',
     description: '',
     filename: '',
+    overwrite_id: 0,
+    raw_output: false,
   })
   const [uploadFile, setUploadFile] = useState<File | null>(null)
 
@@ -544,9 +547,16 @@ function SubscribeFilesPage() {
 
       const formData = new FormData()
       formData.append('file', uploadFile)
-      formData.append('name', uploadForm.name || uploadFile.name)
-      formData.append('description', uploadForm.description)
-      formData.append('filename', uploadForm.filename || uploadFile.name)
+      if (uploadForm.overwrite_id > 0) {
+        formData.append('overwrite_id', String(uploadForm.overwrite_id))
+      } else {
+        formData.append('name', uploadForm.name || uploadFile.name)
+        formData.append('description', uploadForm.description)
+        formData.append('filename', uploadForm.filename || uploadFile.name)
+      }
+      if (uploadForm.raw_output) {
+        formData.append('raw_output', 'true')
+      }
 
       const response = await api.post('/api/admin/subscribe-files/upload', formData, {
         headers: {
@@ -558,9 +568,9 @@ function SubscribeFilesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subscribe-files'] })
       queryClient.invalidateQueries({ queryKey: ['user-subscriptions'] })
-      toast.success('文件上传成功')
+      toast.success(uploadForm.overwrite_id > 0 ? '文件覆盖成功' : '文件上传成功')
       setUploadDialogOpen(false)
-      setUploadForm({ name: '', description: '', filename: '' })
+      setUploadForm({ name: '', description: '', filename: '', overwrite_id: 0, raw_output: false })
       setUploadFile(null)
     },
     onError: (error: any) => {
@@ -1409,6 +1419,10 @@ function SubscribeFilesPage() {
   const handleUpload = () => {
     if (!uploadFile) {
       toast.error('请选择文件')
+      return
+    }
+    if (uploadForm.overwrite_id === 0 && !uploadForm.name && !uploadFile.name) {
+      toast.error('请填写订阅名称')
       return
     }
     uploadMutation.mutate()
@@ -2335,53 +2349,84 @@ function SubscribeFilesPage() {
                     <DialogHeader>
                       <DialogTitle>上传文件</DialogTitle>
                       <DialogDescription>
-                        上传本地 YAML 格式的 Clash 订阅文件
+                        上传本地文件作为订阅配置，或覆盖已有订阅的文件内容
                       </DialogDescription>
                     </DialogHeader>
                     <div className='space-y-4 py-4'>
+                      <div className='space-y-2'>
+                        <Label>覆盖已有订阅</Label>
+                        <Select
+                          value={String(uploadForm.overwrite_id)}
+                          onValueChange={(val) => setUploadForm({ ...uploadForm, overwrite_id: Number(val) })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder='新建订阅' />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value='0'>新建订阅</SelectItem>
+                            {files.map((f) => (
+                              <SelectItem key={f.id} value={String(f.id)}>
+                                {f.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className='flex items-center justify-between'>
+                        <Label htmlFor='upload-raw-output'>这不是 Clash 配置</Label>
+                        <Switch
+                          id='upload-raw-output'
+                          checked={uploadForm.raw_output}
+                          onCheckedChange={(checked) => setUploadForm({ ...uploadForm, raw_output: checked })}
+                        />
+                      </div>
                       <div className='space-y-2'>
                         <Label htmlFor='upload-file'>选择文件 *</Label>
                         <Input
                           id='upload-file'
                           type='file'
-                          accept='.yaml,.yml'
+                          accept={uploadForm.raw_output ? undefined : '.yaml,.yml'}
                           onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
                         />
                       </div>
-                      <div className='space-y-2'>
-                        <Label htmlFor='upload-name'>订阅名称（可选）</Label>
-                        <Input
-                          id='upload-name'
-                          placeholder='留空则使用文件名'
-                          value={uploadForm.name}
-                          onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })}
-                        />
-                      </div>
-                      <div className='space-y-2'>
-                        <Label htmlFor='upload-filename'>文件名（可选）</Label>
-                        <Input
-                          id='upload-filename'
-                          placeholder='留空则使用原文件名'
-                          value={uploadForm.filename}
-                          onChange={(e) => setUploadForm({ ...uploadForm, filename: e.target.value })}
-                        />
-                      </div>
-                      <div className='space-y-2'>
-                        <Label htmlFor='upload-description'>说明（可选）</Label>
-                        <Textarea
-                          id='upload-description'
-                          placeholder='订阅说明信息'
-                          value={uploadForm.description}
-                          onChange={(e) => setUploadForm({ ...uploadForm, description: e.target.value })}
-                        />
-                      </div>
+                      {uploadForm.overwrite_id === 0 && (
+                        <>
+                          <div className='space-y-2'>
+                            <Label htmlFor='upload-name'>订阅名称（可选）</Label>
+                            <Input
+                              id='upload-name'
+                              placeholder='留空则使用文件名'
+                              value={uploadForm.name}
+                              onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })}
+                            />
+                          </div>
+                          <div className='space-y-2'>
+                            <Label htmlFor='upload-filename'>文件名（可选）</Label>
+                            <Input
+                              id='upload-filename'
+                              placeholder='留空则使用原文件名'
+                              value={uploadForm.filename}
+                              onChange={(e) => setUploadForm({ ...uploadForm, filename: e.target.value })}
+                            />
+                          </div>
+                          <div className='space-y-2'>
+                            <Label htmlFor='upload-description'>说明（可选）</Label>
+                            <Textarea
+                              id='upload-description'
+                              placeholder='订阅说明信息'
+                              value={uploadForm.description}
+                              onChange={(e) => setUploadForm({ ...uploadForm, description: e.target.value })}
+                            />
+                          </div>
+                        </>
+                      )}
                     </div>
                     <DialogFooter>
                       <Button variant='outline' onClick={() => setUploadDialogOpen(false)}>
                         取消
                       </Button>
                       <Button onClick={handleUpload} disabled={uploadMutation.isPending}>
-                        {uploadMutation.isPending ? '上传中...' : '上传'}
+                        {uploadMutation.isPending ? '上传中...' : (uploadForm.overwrite_id > 0 ? '覆盖上传' : '上传')}
                       </Button>
                     </DialogFooter>
                   </DialogContent>
@@ -2965,6 +3010,11 @@ function SubscribeFilesPage() {
                         <Badge variant='outline' className={TYPE_COLORS[file.type]}>
                           {TYPE_LABELS[file.type]}
                         </Badge>
+                        {file.raw_output && (
+                          <Badge variant='outline' className='bg-orange-500/10 text-orange-700 dark:text-orange-400'>
+                            原始输出
+                          </Badge>
+                        )}
                         <div className='font-medium text-sm truncate'>{file.name}</div>
                       </div>
                       <AlertDialog>

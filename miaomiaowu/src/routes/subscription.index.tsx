@@ -77,6 +77,7 @@ type SubscribeFile = {
   filename: string
   file_short_code?: string
   custom_short_code?: string
+  raw_output?: boolean
   expire_at?: string | null
   created_at: string
   updated_at: string
@@ -277,47 +278,60 @@ function SubscriptionPage() {
                     {displayURL}
                   </div>
                   <div className='grid grid-cols-2 gap-2'>
-                    {showCopy ? (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            size='sm'
-                            className='w-full transition-transform hover:-translate-y-0.5 hover:shadow-md active:translate-y-0.5 active:scale-95'
-                          >
-                            <Copy className='mr-2 size-4' />
-                            复制
-                            <ChevronDown className='ml-2 size-4' />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align='end' className='w-56'>
-                          {CLIENT_TYPES.map((client) => {
-                            const clientURL = buildSubscriptionURL(file.filename, file.file_short_code, file.custom_short_code, client.type)
-                            return (
-                              <DropdownMenuItem
-                                key={client.type}
-                                onClick={() => handleCopy(file.id, clientURL, client.name)}
-                                className='cursor-pointer'
-                              >
-                                <img src={client.icon} alt={client.name} className='mr-2 size-4' />
-                                {client.name}
-                              </DropdownMenuItem>
-                            )
-                          })}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    ) : null}
-                    {showImport ? (
+                    {file.raw_output ? (
                       <Button
                         size='sm'
-                        variant='secondary'
-                        className='w-full transition-transform hover:-translate-y-0.5 hover:shadow-md active:translate-y-0.5 active:scale-95'
-                        asChild
+                        className='w-full col-span-2 transition-transform hover:-translate-y-0.5 hover:shadow-md active:translate-y-0.5 active:scale-95'
+                        onClick={() => handleCopy(file.id, subscribeURL, '订阅链接')}
                       >
-                        <a href={clashURL}>
-                          <Download className='mr-2 size-4' />导入 Clash
-                        </a>
+                        <Copy className='mr-2 size-4' />
+                        复制订阅链接
                       </Button>
-                    ) : null}
+                    ) : (
+                      <>
+                        {showCopy ? (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                size='sm'
+                                className='w-full transition-transform hover:-translate-y-0.5 hover:shadow-md active:translate-y-0.5 active:scale-95'
+                              >
+                                <Copy className='mr-2 size-4' />
+                                复制
+                                <ChevronDown className='ml-2 size-4' />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align='end' className='w-56'>
+                              {CLIENT_TYPES.map((client) => {
+                                const clientURL = buildSubscriptionURL(file.filename, file.file_short_code, file.custom_short_code, client.type)
+                                return (
+                                  <DropdownMenuItem
+                                    key={client.type}
+                                    onClick={() => handleCopy(file.id, clientURL, client.name)}
+                                    className='cursor-pointer'
+                                  >
+                                    <img src={client.icon} alt={client.name} className='mr-2 size-4' />
+                                    {client.name}
+                                  </DropdownMenuItem>
+                                )
+                              })}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : null}
+                        {showImport ? (
+                          <Button
+                            size='sm'
+                            variant='secondary'
+                            className='w-full transition-transform hover:-translate-y-0.5 hover:shadow-md active:translate-y-0.5 active:scale-95'
+                            asChild
+                          >
+                            <a href={clashURL}>
+                              <Download className='mr-2 size-4' />导入 Clash
+                            </a>
+                          </Button>
+                        ) : null}
+                      </>
+                    )}
                   </div>
                 </CardContent>
               </Card>

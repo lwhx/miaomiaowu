@@ -279,6 +279,73 @@ func (h *subscribeFilesHandler) handleUpload(w http.ResponseWriter, r *http.Requ
 	}
 	defer file.Close()
 
+	// 解析覆盖和原始输出参数
+	overwriteIDStr := r.FormValue("overwrite_id")
+	rawOutputStr := r.FormValue("raw_output")
+	rawOutput := rawOutputStr == "true" || rawOutputStr == "1"
+
+	// 读取文件内容
+	content, err := io.ReadAll(file)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errors.New("读取文件失败"))
+		return
+	}
+
+	// 非原始输出模式需要验证YAML格式
+	if !rawOutput {
+		var yamlCheck map[string]any
+		if err := yaml.Unmarshal(content, &yamlCheck); err != nil {
+			writeError(w, http.StatusBadRequest, errors.New("文件不是有效的YAML格式"))
+			return
+		}
+	}
+
+	subscribesDir := "subscribes"
+	if err := os.MkdirAll(subscribesDir, 0755); err != nil {
+		writeError(w, http.StatusInternalServerError, errors.New("创建订阅目录失败"))
+		return
+	}
+
+	// 覆盖模式：替换已有订阅的文件内容
+	if overwriteIDStr != "" && overwriteIDStr != "0" {
+		overwriteID, parseErr := strconv.ParseInt(overwriteIDStr, 10, 64)
+		if parseErr != nil || overwriteID <= 0 {
+			writeBadRequest(w, "无效的覆盖订阅ID")
+			return
+		}
+
+		existing, getErr := h.repo.GetSubscribeFileByID(r.Context(), overwriteID)
+		if getErr != nil {
+			if errors.Is(getErr, storage.ErrSubscribeFileNotFound) {
+				writeError(w, http.StatusNotFound, errors.New("要覆盖的订阅不存在"))
+				return
+			}
+			writeError(w, http.StatusInternalServerError, getErr)
+			return
+		}
+
+		// 覆写物理文件
+		filePath := filepath.Join(subscribesDir, existing.Filename)
+		if err := os.WriteFile(filePath, content, 0644); err != nil {
+			writeError(w, http.StatusInternalServerError, errors.New("保存订阅文件失败"))
+			return
+		}
+
+		// 如果 raw_output 状态变化，更新数据库
+		if existing.RawOutput != rawOutput {
+			existing.RawOutput = rawOutput
+			if _, updateErr := h.repo.UpdateSubscribeFile(r.Context(), existing); updateErr != nil {
+				logger.Info("[上传覆盖] 更新 raw_output 失败", "id", overwriteID, "error", updateErr)
+			}
+		}
+
+		respondJSON(w, http.StatusOK, map[string]any{
+			"file": convertSubscribeFile(existing),
+		})
+		return
+	}
+
+	// 新建模式
 	name := r.FormValue("name")
 	if name == "" {
 		name = strings.TrimSuffix(header.Filename, filepath.Ext(header.Filename))
@@ -290,30 +357,12 @@ func (h *subscribeFilesHandler) handleUpload(w http.ResponseWriter, r *http.Requ
 		filename = header.Filename
 	}
 
-	// 确保文件名有.yaml或.yml扩展名
-	ext := filepath.Ext(filename)
-	if ext != ".yaml" && ext != ".yml" {
-		filename = filename + ".yaml"
-	}
-
-	// 读取并验证YAML格式
-	content, err := io.ReadAll(file)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, errors.New("读取文件失败"))
-		return
-	}
-
-	var yamlCheck map[string]any
-	if err := yaml.Unmarshal(content, &yamlCheck); err != nil {
-		writeError(w, http.StatusBadRequest, errors.New("文件不是有效的YAML格式"))
-		return
-	}
-
-	// 保存文件到subscribes目录
-	subscribesDir := "subscribes"
-	if err := os.MkdirAll(subscribesDir, 0755); err != nil {
-		writeError(w, http.StatusInternalServerError, errors.New("创建订阅目录失败"))
-		return
+	// 非原始输出模式确保文件名有.yaml或.yml扩展名
+	if !rawOutput {
+		ext := filepath.Ext(filename)
+		if ext != ".yaml" && ext != ".yml" {
+			filename = filename + ".yaml"
+		}
 	}
 
 	filePath := filepath.Join(subscribesDir, filename)
@@ -322,18 +371,17 @@ func (h *subscribeFilesHandler) handleUpload(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// 保存到数据库
 	subscribeFile := storage.SubscribeFile{
 		Name:        name,
 		Description: description,
-		URL:         "", // 上传的文件没有URL
+		URL:         "",
 		Type:        storage.SubscribeTypeUpload,
 		Filename:    filename,
+		RawOutput:   rawOutput,
 	}
 
 	created, err := h.repo.CreateSubscribeFile(r.Context(), subscribeFile)
 	if err != nil {
-		// 如果数据库保存失败，删除已保存的文件
 		_ = os.Remove(filePath)
 		if errors.Is(err, storage.ErrSubscribeFileExists) {
 			writeError(w, http.StatusConflict, errors.New("订阅名称已存在"))
@@ -342,9 +390,6 @@ func (h *subscribeFilesHandler) handleUpload(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-
-	// Don't auto-apply custom rules for uploaded files
-	// Users can manually enable auto-sync if needed
 
 	respondJSON(w, http.StatusCreated, map[string]any{
 		"file": convertSubscribeFile(created),
@@ -391,6 +436,9 @@ func (h *subscribeFilesHandler) handleUpdate(w http.ResponseWriter, r *http.Requ
 	wasAutoSyncEnabled := existing.AutoSyncCustomRules
 	if req.AutoSyncCustomRules != nil {
 		existing.AutoSyncCustomRules = *req.AutoSyncCustomRules
+	}
+	if req.RawOutput != nil {
+		existing.RawOutput = *req.RawOutput
 	}
 	// 更新模板绑定（绑定模板后禁用规则同步）
 	templateJustBound := false
@@ -612,6 +660,7 @@ type subscribeFileRequest struct {
 	SelectedTags        []string `json:"selected_tags,omitempty"`          // 选中的节点标签
 	CustomShortCode     *string  `json:"custom_short_code,omitempty"`      // 自定义短链接码
 	ExpireAt            *string  `json:"expire_at,omitempty"`
+	RawOutput           *bool    `json:"raw_output,omitempty"` // 非Clash配置，直接输出原始内容
 }
 
 type subscribeFileDTO struct {
@@ -625,6 +674,7 @@ type subscribeFileDTO struct {
 	TemplateFilename    string     `json:"template_filename"`
 	SelectedTags        []string   `json:"selected_tags"`
 	CustomShortCode     string     `json:"custom_short_code"`
+	RawOutput           bool       `json:"raw_output"`
 	CreatedAt           time.Time  `json:"created_at"`
 	UpdatedAt           time.Time  `json:"updated_at"`
 	LatestVersion       int64      `json:"latest_version,omitempty"`
@@ -646,6 +696,7 @@ func convertSubscribeFile(file storage.SubscribeFile) subscribeFileDTO {
 		TemplateFilename:    file.TemplateFilename,
 		SelectedTags:        selectedTags,
 		CustomShortCode:     file.CustomShortCode,
+		RawOutput:           file.RawOutput,
 		CreatedAt:           file.CreatedAt,
 		UpdatedAt:           file.UpdatedAt,
 	}

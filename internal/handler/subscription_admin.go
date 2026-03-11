@@ -430,6 +430,7 @@ func NewSubscriptionListHandler(repo *storage.TrafficRepository) http.Handler {
 			Type            string     `json:"type"`
 			FileShortCode   string     `json:"file_short_code,omitempty"`
 			CustomShortCode string     `json:"custom_short_code,omitempty"`
+			RawOutput       bool       `json:"raw_output"`
 			ExpireAt        *time.Time `json:"expire_at,omitempty"`
 			UpdatedAt       time.Time  `json:"updated_at"`
 			LatestVersion   int64      `json:"latest_version,omitempty"`
@@ -459,6 +460,7 @@ func NewSubscriptionListHandler(repo *storage.TrafficRepository) http.Handler {
 				Type:            file.Type,
 				FileShortCode:   fileShortCode,
 				CustomShortCode: customShortCode,
+				RawOutput:       file.RawOutput,
 				ExpireAt:        file.ExpireAt,
 				UpdatedAt:       file.UpdatedAt,
 				LatestVersion:   latestVersion,

@@ -319,6 +319,36 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	// 非Clash配置：直接输出原始文件内容，跳过所有转换处理
+	if hasSubscribeFile && subscribeFile.RawOutput {
+		rawData, readErr := os.ReadFile(resolvedPath)
+		if readErr != nil {
+			if errors.Is(readErr, os.ErrNotExist) {
+				writeError(w, http.StatusNotFound, readErr)
+			} else {
+				writeError(w, http.StatusInternalServerError, readErr)
+			}
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("profile-update-interval", "24")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(rawData)
+
+		logger.Info("📥📥📥 [SUB_FETCH] 用户获取订阅（原始输出）",
+			"user", username, "filename", filename, "bytes", len(rawData),
+			"duration_ms", time.Since(requestStart).Milliseconds(),
+		)
+		clientIP := GetClientIP(r)
+		if silentMgr := GetSilentModeManager(); silentMgr != nil && username != "" {
+			silentMgr.RecordSubscriptionAccessWithIP(username, clientIP)
+		}
+		if bfp := GetBruteForceProtector(); bfp != nil {
+			bfp.RecordSuccess(clientIP)
+		}
+		return
+	}
+
 	// 模板生成逻辑：如果订阅绑定了 V3 模板，使用模板生成配置
 	var data []byte
 	fromTemplate := false

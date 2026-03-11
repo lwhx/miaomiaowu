@@ -233,6 +233,7 @@ type SubscribeFile struct {
 	AutoSyncCustomRules bool       // Whether to automatically sync custom rules to this file
 	TemplateFilename    string     // 绑定的 V3 模板文件名，为空表示未绑定模板
 	SelectedTags        []string   // 选中的节点标签，为空表示使用所有节点
+	RawOutput           bool       // 非Clash配置，直接输出原始内容
 	ExpireAt            *time.Time // Optional expiration timestamp
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
@@ -845,6 +846,11 @@ CREATE INDEX IF NOT EXISTS idx_external_subscriptions_url ON external_subscripti
 	}
 	if _, err := r.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_subscribe_files_custom_short_code ON subscribe_files(custom_short_code) WHERE custom_short_code != '';`); err != nil {
 		return fmt.Errorf("create subscribe_files custom_short_code index: %w", err)
+	}
+
+	// Add raw_output column to subscribe_files table
+	if err := r.ensureSubscribeFileColumn("raw_output", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
 	}
 
 	// Create system_config table for global settings
