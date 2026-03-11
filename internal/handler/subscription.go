@@ -1836,8 +1836,14 @@ func (h *SubscriptionHandler) generateFromTemplate(ctx context.Context, username
 	}
 	logger.Info("[模板生成] 读取模板文件", "template", subscribeFile.TemplateFilename, "bytes", len(templateContent))
 
-	// 2. 从节点表获取用户的所有代理节点
-	nodes, err := h.repo.ListNodes(ctx, username)
+	// 2. 从节点表获取代理节点（非管理员使用管理员的节点）
+	nodeOwner := username
+	if user, err := h.repo.GetUser(ctx, username); err == nil && user.Role != storage.RoleAdmin {
+		if adminName, err := h.repo.GetAdminUsername(ctx); err == nil {
+			nodeOwner = adminName
+		}
+	}
+	nodes, err := h.repo.ListNodes(ctx, nodeOwner)
 	if err != nil {
 		return nil, fmt.Errorf("获取节点列表失败: %w", err)
 	}
@@ -1860,8 +1866,8 @@ func (h *SubscriptionHandler) generateFromTemplate(ctx context.Context, username
 	}
 	logger.Info("[模板生成] 从节点表获取代理节点", "total", len(nodes), "enabled", len(proxies))
 
-	// 3. 从代理集合表获取用户的代理集合配置（用于 proxy-providers）
-	providerConfigs, err := h.repo.ListProxyProviderConfigs(ctx, username)
+	// 3. 从代理集合表获取代理集合配置（用于 proxy-providers）
+	providerConfigs, err := h.repo.ListProxyProviderConfigs(ctx, nodeOwner)
 	if err != nil {
 		logger.Info("[模板生成] 获取代理集合配置失败", "error", err)
 		// 不是致命错误，继续处理

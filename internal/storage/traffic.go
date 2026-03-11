@@ -2721,6 +2721,19 @@ func (r *TrafficRepository) GetUser(ctx context.Context, username string) (User,
 	return user, nil
 }
 
+// GetAdminUsername returns the username of the first admin user.
+func (r *TrafficRepository) GetAdminUsername(ctx context.Context) (string, error) {
+	if r == nil || r.db == nil {
+		return "", errors.New("traffic repository not initialized")
+	}
+	var username string
+	err := r.db.QueryRowContext(ctx, `SELECT username FROM users WHERE role = 'admin' LIMIT 1`).Scan(&username)
+	if err != nil {
+		return "", fmt.Errorf("get admin username: %w", err)
+	}
+	return username, nil
+}
+
 // ListUsers returns up to limit users ordered by creation time.
 func (r *TrafficRepository) ListUsers(ctx context.Context, limit int) ([]User, error) {
 	if r == nil || r.db == nil {
