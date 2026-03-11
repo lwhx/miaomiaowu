@@ -2871,7 +2871,7 @@ function SubscribeFilesPage() {
                               disabled={updateMetadataMutation.isPending}
                             >
                               <span className="truncate">
-                                {selectedTags.length > 0 ? `${selectedTags.length} 个标签` : '全部节点'}
+                                {selectedTags.length === 1 ? selectedTags[0] : selectedTags.length > 1 ? `${selectedTags.length} 个标签` : '全部节点'}
                               </span>
                               <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
                             </Button>

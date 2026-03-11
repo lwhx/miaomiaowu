@@ -43,6 +43,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 // Import local icons
 import clashIcon from '@/assets/icons/clash_color.png'
@@ -232,7 +237,7 @@ function SubscriptionPage() {
             return (
               <Card key={file.id} className='flex flex-col justify-between'>
                 <CardHeader>
-                  <div className='flex items-start gap-3'>
+                  <div className='flex items-start gap-3 overflow-hidden'>
                     <button
                       onClick={() => setQrValue(displayURL)}
                       className='flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all hover:bg-primary/20 hover:scale-110 active:scale-95 cursor-pointer'
@@ -241,9 +246,14 @@ function SubscriptionPage() {
                       <Icon className='size-6' />
                     </button>
                     <div className='flex-1 min-w-0 space-y-1 text-left'>
-                      <CardTitle className='text-lg truncate' title={file.name}>
-                        {file.name}
-                      </CardTitle>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <CardTitle className='text-lg truncate'>
+                            {file.name}
+                          </CardTitle>
+                        </TooltipTrigger>
+                        <TooltipContent>{file.name}</TooltipContent>
+                      </Tooltip>
                       <CardDescription>{file.description || '—'}</CardDescription>
                     </div>
                   </div>

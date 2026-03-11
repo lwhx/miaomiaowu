@@ -1848,11 +1848,22 @@ func (h *SubscriptionHandler) generateFromTemplate(ctx context.Context, username
 		return nil, fmt.Errorf("获取节点列表失败: %w", err)
 	}
 
+	// 构建选中标签的 map 用于快速查找
+	selectedTagsMap := make(map[string]bool)
+	for _, tag := range subscribeFile.SelectedTags {
+		selectedTagsMap[tag] = true
+	}
+	hasTagFilter := len(selectedTagsMap) > 0
+
 	// 将节点转换为 proxies 格式（[]map[string]any）
 	var proxies []map[string]any
 	for _, node := range nodes {
 		if !node.Enabled {
 			continue // 跳过禁用的节点
+		}
+		// 标签过滤：只使用选中标签的节点
+		if hasTagFilter && !selectedTagsMap[node.Tag] {
+			continue
 		}
 		// ClashConfig 是 JSON 格式的字符串，需要解析
 		var proxyConfig map[string]any
@@ -1864,7 +1875,7 @@ func (h *SubscriptionHandler) generateFromTemplate(ctx context.Context, username
 		proxyConfig["name"] = node.NodeName
 		proxies = append(proxies, proxyConfig)
 	}
-	logger.Info("[模板生成] 从节点表获取代理节点", "total", len(nodes), "enabled", len(proxies))
+	logger.Info("[模板生成] 从节点表获取代理节点", "total", len(nodes), "enabled", len(proxies), "tag_filter", hasTagFilter)
 
 	// 3. 从代理集合表获取代理集合配置（用于 proxy-providers）
 	providerConfigs, err := h.repo.ListProxyProviderConfigs(ctx, nodeOwner)
