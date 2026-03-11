@@ -406,12 +406,9 @@ func NewSubscriptionListHandler(repo *storage.TrafficRepository) http.Handler {
 			}
 		}
 
-		// Get user settings to check if short link is enabled
-		userSettings, err := repo.GetUserSettings(r.Context(), username)
-		enableShortLink := false
-		if err == nil {
-			enableShortLink = userSettings.EnableShortLink
-		}
+		// Get system config to check if short link is enabled (global setting)
+		systemConfig, err := repo.GetSystemConfig(r.Context())
+		enableShortLink := err == nil && systemConfig.EnableShortLink
 
 		// Get user short code only if short link is enabled
 		var userShortCode string
