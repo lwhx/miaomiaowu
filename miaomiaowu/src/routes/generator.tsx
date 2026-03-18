@@ -1174,7 +1174,7 @@ function SubscriptionGeneratorPage() {
     },
     onSuccess: () => {
       toast.success('订阅保存成功！')
-      toast.info('请前往"订阅文件"页面查看')
+      toast.info('请前往"订阅管理"页面查看')
       setSaveDialogOpen(false)
       setSubscribeName('')
       setSubscribeFilename('')
