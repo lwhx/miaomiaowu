@@ -433,7 +433,7 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 			ClashConfig:  string(clashConfigBytes),
 			Enabled:      true,
 			Tag:          sub.Name, // Use external subscription name as tag
-		Tags:         []string{sub.Name},
+			Tags:         []string{sub.Name},
 		}
 
 		nodesToUpdate = append(nodesToUpdate, node)
@@ -483,7 +483,11 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 				for i := range existingNodes {
 					var existingClashConfig map[string]any
 					if err := json.Unmarshal([]byte(existingNodes[i].ClashConfig), &existingClashConfig); err == nil {
+						// 使用解析IP前的域名匹配
 						existingServer, _ := existingClashConfig["server"].(string)
+						if existingNodes[i].OriginalServer != "" {
+							existingServer = existingNodes[i].OriginalServer
+						}
 						existingPort := existingClashConfig["port"]
 						existingType, _ := existingClashConfig["type"].(string)
 
@@ -506,7 +510,11 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 				for i := range existingNodes {
 					var existingClashConfig map[string]any
 					if err := json.Unmarshal([]byte(existingNodes[i].ClashConfig), &existingClashConfig); err == nil {
+						// 优先使用原始域名匹配（IP 解析前的地址）
 						existingServer, _ := existingClashConfig["server"].(string)
+						if existingNodes[i].OriginalServer != "" {
+							existingServer = existingNodes[i].OriginalServer
+						}
 						existingPort := existingClashConfig["port"]
 
 						// Compare server:port
