@@ -206,6 +206,11 @@ func (h *TemplateV3Handler) handlePreviewWithTags(w http.ResponseWriter, r *http
 		return
 	}
 
+	// 按用户配置的节点顺序排序
+	if settings, err := h.repo.GetUserSettings(r.Context(), username); err == nil && len(settings.NodeOrder) > 0 {
+		sortNodesByNodeOrder(nodes, settings.NodeOrder)
+	}
+
 	// Filter nodes by selected tags and enabled status
 	var proxies []map[string]any
 	selectedTagsSet := make(map[string]bool)
