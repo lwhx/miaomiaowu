@@ -1,7 +1,6 @@
 package proxygroups
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -52,13 +51,13 @@ func FetchConfig(overrideURL string) ([]byte, string, error) {
 		return nil, resolvedURL, err
 	}
 
-	// 验证配置有效性
-	var parsed any
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		return nil, resolvedURL, fmt.Errorf("%w: %v", ErrInvalidConfig, err)
+	// 规范化并验证配置有效性
+	normalized, err := NormalizeConfig(data)
+	if err != nil {
+		return nil, resolvedURL, err
 	}
 
-	return data, resolvedURL, nil
+	return normalized, resolvedURL, nil
 }
 
 // downloadConfig 从远程地址下载配置
