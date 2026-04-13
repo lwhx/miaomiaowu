@@ -31,18 +31,18 @@ dns:
   enhanced-mode: fake-ip
   ipv6: true
   nameserver:
-    - https://120.53.53.53/dns-query
-    - https://223.5.5.5/dns-query
+    - https://doh.pub/dns-query
+    - https://dns.alidns.com/dns-query
   nameserver-policy:
     geosite:cn,private:
-      - https://120.53.53.53/dns-query
-      - https://223.5.5.5/dns-query
+      - https://doh.pub/dns-query
+      - https://dns.alidns.com/dns-query
     geosite:geolocation-!cn:
       - https://dns.cloudflare.com/dns-query
       - https://dns.google/dns-query
   proxy-server-nameserver:
-    - https://120.53.53.53/dns-query
-    - https://223.5.5.5/dns-query
+    - https://doh.pub/dns-query
+    - https://dns.alidns.com/dns-query
   respect-rules: true
 geo-auto-update: true
 geo-update-interval: 24
