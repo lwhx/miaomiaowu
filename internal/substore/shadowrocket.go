@@ -52,7 +52,7 @@ func (p *ShadowrocketProducer) Produce(proxies []Proxy, outputType string, opts 
 			if proxyType == "mieru" || proxyType == "sudoku" || proxyType == "naive" {
 				continue
 			}
-			// VLESS with non-none encryption
+			// 先屏蔽 vless enc, 现在支持的有限 20260414, 后续再打开
 			if proxyType == "vless" {
 				encryption := GetString(proxy, "encryption")
 				if encryption != "" && encryption != "none" {
