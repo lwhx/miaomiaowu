@@ -1403,7 +1403,7 @@ export function toClashProxy(node: ProxyNode): ClashProxy {
 
   // SNI 设置 - 特定协议需要输出 sni 字段
   if (node.type === 'hysteria' || node.type === 'hysteria2' || node.type === 'trojan' || node.type === 'tuic' || node.type === 'anytls') {
-    if (typeof node.sni === 'string' && (node.sni === '' || node.sni !== node.server)) {
+    if (typeof node.sni === 'string') {
       clash.sni = node.sni
     }
   }
