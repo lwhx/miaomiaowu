@@ -160,7 +160,7 @@ function LoginView() {
       <Card className='w-full max-w-sm shadow-lg'>
         <CardHeader className='space-y-2 text-center'>
           <CardTitle className='text-2xl font-semibold'>登录妙妙屋</CardTitle>
-          <CardDescription>请输入管理员账号以访问控制台。</CardDescription>
+          <CardDescription>请输入用户账号以访问妙妙屋</CardDescription>
         </CardHeader>
         <CardContent>
           <form className='space-y-6' onSubmit={onSubmit}>

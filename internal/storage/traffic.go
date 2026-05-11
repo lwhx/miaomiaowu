@@ -334,18 +334,6 @@ type CustomRule struct {
 	UpdatedAt time.Time
 }
 
-// CustomRuleApplication tracks what content was applied by custom rules to subscribe files
-type CustomRuleApplication struct {
-	ID              int64
-	SubscribeFileID int64
-	CustomRuleID    int64
-	RuleType        string // "dns", "rules", "rule-providers"
-	RuleMode        string // "replace", "prepend"
-	AppliedContent  string // JSON-serialized content that was applied
-	ContentHash     string // SHA256 hash of the content for quick comparison
-	AppliedAt       time.Time
-}
-
 // ProxyProviderConfig represents a proxy-provider configuration for external subscription
 type ProxyProviderConfig struct {
 	ID                        int64
@@ -4173,101 +4161,6 @@ func (r *TrafficRepository) ListEnabledCustomRules(ctx context.Context, ruleType
 	}
 
 	return rules, nil
-}
-
-// GetCustomRuleApplications retrieves all custom rule applications for a subscribe file.
-func (r *TrafficRepository) GetCustomRuleApplications(ctx context.Context, fileID int64) ([]CustomRuleApplication, error) {
-	if r == nil || r.db == nil {
-		return nil, errors.New("traffic repository not initialized")
-	}
-
-	if fileID <= 0 {
-		return nil, errors.New("subscribe file id is required")
-	}
-
-	const query = `SELECT id, subscribe_file_id, custom_rule_id, rule_type, rule_mode, applied_content, content_hash, applied_at
-		FROM custom_rule_applications
-		WHERE subscribe_file_id = ?
-		ORDER BY applied_at DESC`
-
-	rows, err := r.db.QueryContext(ctx, query, fileID)
-	if err != nil {
-		return nil, fmt.Errorf("get custom rule applications: %w", err)
-	}
-	defer rows.Close()
-
-	var applications []CustomRuleApplication
-	for rows.Next() {
-		var app CustomRuleApplication
-		if err := rows.Scan(&app.ID, &app.SubscribeFileID, &app.CustomRuleID, &app.RuleType, &app.RuleMode, &app.AppliedContent, &app.ContentHash, &app.AppliedAt); err != nil {
-			return nil, fmt.Errorf("scan custom rule application: %w", err)
-		}
-		applications = append(applications, app)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate custom rule applications: %w", err)
-	}
-
-	return applications, nil
-}
-
-// UpsertCustomRuleApplication inserts or updates a custom rule application record.
-func (r *TrafficRepository) UpsertCustomRuleApplication(ctx context.Context, app *CustomRuleApplication) error {
-	if r == nil || r.db == nil {
-		return errors.New("traffic repository not initialized")
-	}
-
-	if app.SubscribeFileID <= 0 {
-		return errors.New("subscribe file id is required")
-	}
-	if app.CustomRuleID <= 0 {
-		return errors.New("custom rule id is required")
-	}
-	if app.RuleType == "" {
-		return errors.New("rule type is required")
-	}
-
-	const stmt = `INSERT INTO custom_rule_applications (subscribe_file_id, custom_rule_id, rule_type, rule_mode, applied_content, content_hash, applied_at)
-		VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT(subscribe_file_id, custom_rule_id, rule_type)
-		DO UPDATE SET
-			rule_mode = excluded.rule_mode,
-			applied_content = excluded.applied_content,
-			content_hash = excluded.content_hash,
-			applied_at = CURRENT_TIMESTAMP`
-
-	_, err := r.db.ExecContext(ctx, stmt, app.SubscribeFileID, app.CustomRuleID, app.RuleType, app.RuleMode, app.AppliedContent, app.ContentHash)
-	if err != nil {
-		return fmt.Errorf("upsert custom rule application: %w", err)
-	}
-
-	return nil
-}
-
-// DeleteCustomRuleApplication deletes a custom rule application record.
-func (r *TrafficRepository) DeleteCustomRuleApplication(ctx context.Context, fileID, ruleID int64, ruleType string) error {
-	if r == nil || r.db == nil {
-		return errors.New("traffic repository not initialized")
-	}
-
-	if fileID <= 0 {
-		return errors.New("subscribe file id is required")
-	}
-	if ruleID <= 0 {
-		return errors.New("custom rule id is required")
-	}
-	if ruleType == "" {
-		return errors.New("rule type is required")
-	}
-
-	const stmt = `DELETE FROM custom_rule_applications WHERE subscribe_file_id = ? AND custom_rule_id = ? AND rule_type = ?`
-	_, err := r.db.ExecContext(ctx, stmt, fileID, ruleID, ruleType)
-	if err != nil {
-		return fmt.Errorf("delete custom rule application: %w", err)
-	}
-
-	return nil
 }
 
 // IsSyncTrafficEnabled checks if sync_traffic is enabled in any user_settings (system-level setting).
