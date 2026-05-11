@@ -552,13 +552,13 @@ function TwoFactorCard() {
         <CardHeader>
           <CardTitle>两步验证</CardTitle>
           <CardDescription>
-            {tfStatus.enabled
+            {tfStatus?.enabled
               ? '两步验证已启用，每次登录需要输入验证码。'
               : '启用后每次登录需要输入验证器应用中的验证码。'}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {tfStatus.enabled ? (
+          {tfStatus?.enabled ? (
             <Button variant='destructive' className='w-full' onClick={() => setDisableOpen(true)}>
               禁用两步验证
             </Button>
