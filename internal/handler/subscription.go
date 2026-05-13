@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -497,9 +498,11 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	// 读取系统配置，判断是否启用订阅响应头流量信息
 	enableSubTrafficHeader := true
+	subscriptionOutputFormat := "yaml"
 	if h.repo != nil {
 		if sysConfig, cfgErr := h.repo.GetSystemConfig(r.Context()); cfgErr == nil {
 			enableSubTrafficHeader = sysConfig.EnableSubTrafficHeader
+			subscriptionOutputFormat = sysConfig.SubscriptionOutputFormat
 		}
 	}
 
@@ -847,6 +850,16 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	logger.Info("[⏱️ 耗时监测] YAML 重排序完成", "step", "yaml_reorder", "duration_ms", time.Since(stepStart).Milliseconds())
+
+	// 当系统配置为 JSON 输出且当前仍为 YAML 格式时，转换为 JSON
+	if subscriptionOutputFormat == "json" &&
+		(contentType == "text/yaml; charset=utf-8" || contentType == "text/yaml; charset=utf-8; charset=UTF-8") {
+		if jsonBytes, jsonErr := marshalSubscriptionJSON(data); jsonErr == nil {
+			data = jsonBytes
+			contentType = "application/json; charset=utf-8"
+			ext = ".json"
+		}
+	}
 
 	w.Header().Set("Content-Type", contentType)
 	// 只有在启用了订阅流量响应头且有流量信息时才添加 subscription-userinfo 头
@@ -2173,4 +2186,171 @@ func formatTrafficSize(bytes int64) string {
 	}
 	kb := float64(bytes) / 1024
 	return fmt.Sprintf("%.2fKB", kb)
+}
+
+// marshalSubscriptionJSON 将 YAML 订阅数据转换为自定义 JSON 格式：
+// 顶层属性展开（每行一个），嵌套值紧凑（单行），
+// proxies 和 proxy-groups 内的元素属性按 name, type, server, port 优先排序。
+func marshalSubscriptionJSON(yamlData []byte) ([]byte, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(yamlData, &doc); err != nil {
+		return nil, err
+	}
+	if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("expected YAML mapping document")
+	}
+
+	var buf bytes.Buffer
+	rootMap := doc.Content[0]
+	buf.WriteString("{\n")
+
+	for i := 0; i < len(rootMap.Content); i += 2 {
+		keyNode := rootMap.Content[i]
+		valNode := rootMap.Content[i+1]
+
+		buf.WriteString("  ")
+		jsonEncodeString(&buf, keyNode.Value)
+		buf.WriteString(": ")
+
+		reorder := keyNode.Value == "proxies" || keyNode.Value == "proxy-groups"
+
+		if valNode.Kind == yaml.SequenceNode {
+			jsonWriteSeqExpanded(&buf, valNode, reorder)
+		} else {
+			jsonWriteCompact(&buf, valNode)
+		}
+
+		if i+2 < len(rootMap.Content) {
+			buf.WriteByte(',')
+		}
+		buf.WriteByte('\n')
+	}
+
+	buf.WriteString("}\n")
+	return buf.Bytes(), nil
+}
+
+var jsonProxyKeyPriority = []string{"name", "type", "server", "port"}
+
+func jsonWriteSeqExpanded(buf *bytes.Buffer, node *yaml.Node, reorder bool) {
+	if len(node.Content) == 0 {
+		buf.WriteString("[]")
+		return
+	}
+	buf.WriteString("[\n")
+	for i, elem := range node.Content {
+		buf.WriteString("    ")
+		if reorder && elem.Kind == yaml.MappingNode {
+			jsonWriteMappingReordered(buf, elem)
+		} else {
+			jsonWriteCompact(buf, elem)
+		}
+		if i < len(node.Content)-1 {
+			buf.WriteByte(',')
+		}
+		buf.WriteByte('\n')
+	}
+	buf.WriteString("  ]")
+}
+
+func jsonWriteCompact(buf *bytes.Buffer, node *yaml.Node) {
+	switch node.Kind {
+	case yaml.ScalarNode:
+		jsonWriteScalar(buf, node)
+	case yaml.MappingNode:
+		buf.WriteByte('{')
+		for i := 0; i < len(node.Content); i += 2 {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			jsonEncodeString(buf, node.Content[i].Value)
+			buf.WriteString(": ")
+			jsonWriteCompact(buf, node.Content[i+1])
+		}
+		buf.WriteByte('}')
+	case yaml.SequenceNode:
+		buf.WriteByte('[')
+		for i, elem := range node.Content {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			jsonWriteCompact(buf, elem)
+		}
+		buf.WriteByte(']')
+	}
+}
+
+func jsonWriteMappingReordered(buf *bytes.Buffer, node *yaml.Node) {
+	buf.WriteByte('{')
+
+	keyIdx := make(map[string]int, len(node.Content)/2)
+	for i := 0; i < len(node.Content); i += 2 {
+		keyIdx[node.Content[i].Value] = i
+	}
+
+	written := make(map[int]bool)
+	first := true
+
+	for _, key := range jsonProxyKeyPriority {
+		idx, ok := keyIdx[key]
+		if !ok {
+			continue
+		}
+		if !first {
+			buf.WriteString(", ")
+		}
+		jsonEncodeString(buf, key)
+		buf.WriteString(": ")
+		jsonWriteCompact(buf, node.Content[idx+1])
+		written[idx] = true
+		first = false
+	}
+
+	for i := 0; i < len(node.Content); i += 2 {
+		if written[i] {
+			continue
+		}
+		if !first {
+			buf.WriteString(", ")
+		}
+		jsonEncodeString(buf, node.Content[i].Value)
+		buf.WriteString(": ")
+		jsonWriteCompact(buf, node.Content[i+1])
+		first = false
+	}
+
+	buf.WriteByte('}')
+}
+
+func jsonWriteScalar(buf *bytes.Buffer, node *yaml.Node) {
+	switch node.Tag {
+	case "!!null":
+		buf.WriteString("null")
+	case "!!bool":
+		if node.Value == "true" {
+			buf.WriteString("true")
+		} else {
+			buf.WriteString("false")
+		}
+	case "!!int":
+		if n, err := strconv.ParseInt(node.Value, 0, 64); err == nil {
+			buf.WriteString(strconv.FormatInt(n, 10))
+		} else {
+			buf.WriteString(node.Value)
+		}
+	case "!!float":
+		v := strings.ToLower(node.Value)
+		if v == ".inf" || v == "+.inf" || v == "-.inf" || v == ".nan" {
+			jsonEncodeString(buf, node.Value)
+		} else {
+			buf.WriteString(node.Value)
+		}
+	default:
+		jsonEncodeString(buf, node.Value)
+	}
+}
+
+func jsonEncodeString(buf *bytes.Buffer, s string) {
+	b, _ := json.Marshal(s)
+	buf.Write(b)
 }

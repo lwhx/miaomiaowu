@@ -277,7 +277,8 @@ type SystemConfig struct {
 	SubInfoTrafficPrefix    string // Prefix for remaining traffic node, default "⌛剩余流量"
 	EnableShortLink         bool   // 启用短链接（全局设置）
 	EnableSubTrafficHeader  bool   // 启用订阅响应头流量信息
-	EnableOverrideScripts   bool   // 启用覆写脚本功能
+	EnableOverrideScripts      bool   // 启用覆写脚本功能
+	SubscriptionOutputFormat   string // 订阅输出格式: "yaml" (default) or "json"
 	// Telegram notification settings
 	NotifyEnabled          bool
 	TelegramBotToken       string
@@ -969,6 +970,11 @@ WHERE NOT EXISTS (SELECT 1 FROM system_config WHERE id = 1);
 
 	// Add enable_sub_traffic_header column to system_config table (default enabled)
 	if err := r.ensureSystemConfigColumn("enable_sub_traffic_header", "INTEGER NOT NULL DEFAULT 1"); err != nil {
+		return err
+	}
+
+	// Add subscription_output_format column to system_config table (default "yaml")
+	if err := r.ensureSystemConfigColumn("subscription_output_format", "TEXT NOT NULL DEFAULT 'yaml'"); err != nil {
 		return err
 	}
 
@@ -4584,6 +4590,7 @@ func (r *TrafficRepository) GetSystemConfig(ctx context.Context) (SystemConfig, 
 SELECT proxy_groups_source_url, client_compatibility_mode, silent_mode, silent_mode_timeout,
        enable_sub_info_nodes, sub_info_expire_prefix, sub_info_traffic_prefix,
        COALESCE(enable_short_link, 1), COALESCE(enable_sub_traffic_header, 1), COALESCE(enable_override_scripts, 0),
+       COALESCE(subscription_output_format, 'yaml'),
        COALESCE(notify_enabled, 0), COALESCE(telegram_bot_token, ''), COALESCE(telegram_chat_id, ''),
        COALESCE(notify_subscribe_fetch, 1), COALESCE(notify_login, 1), COALESCE(notify_ip_ban, 1),
        COALESCE(notify_silent_mode, 1), COALESCE(notify_daily_traffic, 0), COALESCE(notify_expiry, 1),
@@ -4601,6 +4608,7 @@ WHERE id = 1
 		&cfg.ProxyGroupsSourceURL, &compatibilityMode, &silentMode, &silentModeTimeout,
 		&enableSubInfoNodes, &cfg.SubInfoExpirePrefix, &cfg.SubInfoTrafficPrefix,
 		&enableShortLinkInt, &enableSubTrafficHeaderInt, &enableOverrideScriptsInt,
+		&cfg.SubscriptionOutputFormat,
 		&notifyEnabledInt, &cfg.TelegramBotToken, &cfg.TelegramChatID,
 		&notifySubFetchInt, &notifyLoginInt, &notifyIPBanInt,
 		&notifySilentModeInt, &notifyDailyTrafficInt, &notifyExpiryInt,
@@ -4609,12 +4617,13 @@ WHERE id = 1
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return SystemConfig{
-				SilentModeTimeout:      15,
-				SubInfoExpirePrefix:    "📅过期时间",
-				SubInfoTrafficPrefix:   "⌛剩余流量",
-				EnableShortLink:        true,
-				EnableSubTrafficHeader: true,
-				NotifyDailyTrafficTime: "08:00",
+				SilentModeTimeout:        15,
+				SubInfoExpirePrefix:      "📅过期时间",
+				SubInfoTrafficPrefix:     "⌛剩余流量",
+				EnableShortLink:          true,
+				EnableSubTrafficHeader:   true,
+				SubscriptionOutputFormat: "yaml",
+				NotifyDailyTrafficTime:   "08:00",
 			}, nil
 		}
 		return SystemConfig{}, fmt.Errorf("query system config: %w", err)
@@ -4646,6 +4655,9 @@ WHERE id = 1
 	if cfg.NotifyDailyTrafficTime == "" {
 		cfg.NotifyDailyTrafficTime = "08:00"
 	}
+	if cfg.SubscriptionOutputFormat == "" {
+		cfg.SubscriptionOutputFormat = "yaml"
+	}
 	return cfg, nil
 }
 
@@ -4664,6 +4676,7 @@ SET proxy_groups_source_url = ?,
     enable_short_link = ?,
     enable_sub_traffic_header = ?,
     enable_override_scripts = ?,
+    subscription_output_format = ?,
     notify_enabled = ?,
     telegram_bot_token = ?,
     telegram_chat_id = ?,
@@ -4702,10 +4715,16 @@ WHERE id = 1
 		dailyTrafficTime = "08:00"
 	}
 
+	subscriptionOutputFormat := cfg.SubscriptionOutputFormat
+	if subscriptionOutputFormat == "" {
+		subscriptionOutputFormat = "yaml"
+	}
+
 	result, err := r.db.ExecContext(ctx, updateStmt,
 		cfg.ProxyGroupsSourceURL, boolToInt(cfg.ClientCompatibilityMode), boolToInt(cfg.SilentMode), silentModeTimeout,
 		boolToInt(cfg.EnableSubInfoNodes), subInfoExpirePrefix, subInfoTrafficPrefix,
 		boolToInt(cfg.EnableShortLink), boolToInt(cfg.EnableSubTrafficHeader), boolToInt(cfg.EnableOverrideScripts),
+		subscriptionOutputFormat,
 		boolToInt(cfg.NotifyEnabled), cfg.TelegramBotToken, cfg.TelegramChatID,
 		boolToInt(cfg.NotifySubscribeFetch), boolToInt(cfg.NotifyLogin), boolToInt(cfg.NotifyIPBan),
 		boolToInt(cfg.NotifySilentMode), boolToInt(cfg.NotifyDailyTraffic), boolToInt(cfg.NotifyExpiry),
